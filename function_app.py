@@ -257,29 +257,38 @@ def data_maker(main_data,account_group,compliance_name,requirement_name,section,
                     for x in req['sectionSummaries']:
                         if x['id']==section['id']:
                             try:
-                                for _ in range(int(x['failedResources'])):
-                                    # row_creation(main_data,cloud,compliance_name,section,requirement_name,ambiente,"FALSE")
-                                    t2=threading.Thread(target=row_creation, args=[main_data,cloud,compliance_name,section,requirement_name,ambiente,"FALSE"])
-                                    t2.start()
-                                t2.join()
-                                logging.info('Failed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
-                                print('Failed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
-                            except:
-                                logging.info('No failed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
-                                print('No failed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                try:
+                                    for _ in range(int(x['failedResources'])):
+                                        # row_creation(main_data,cloud,compliance_name,section,requirement_name,ambiente,"FALSE")
+                                        t2=threading.Thread(target=row_creation, args=[main_data,cloud,compliance_name,section,requirement_name,ambiente,"FALSE"])
+                                        t2.start()
+                                    t2.join()
+                                    logging.info('Failed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                    print('Failed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                except:
+                                    logging.info('No failed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                    print('No failed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
 
-                            try:
-                                for _ in range(int(x['passedResources'])):
-                                    # row_creation(main_data,cloud,compliance_name,section,requirement_name,ambiente,"TRUE")
-                                    t=threading.Thread(target=row_creation, args=[main_data,cloud,compliance_name,section,requirement_name,ambiente,"TRUE"])
-                                    t.start()
-                                t.join()
-                                logging.info('Passed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
-                                print('Passed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                try:
+                                    for _ in range(int(x['passedResources'])):
+                                        # row_creation(main_data,cloud,compliance_name,section,requirement_name,ambiente,"TRUE")
+                                        t=threading.Thread(target=row_creation, args=[main_data,cloud,compliance_name,section,requirement_name,ambiente,"TRUE"])
+                                        t.start()
+                                    t.join()
+                                    logging.info('Passed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                    print('Passed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+
+                                except:
+                                    logging.info('No passed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                    print('No passed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+
                             except:
-                                logging.info('No passed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
-                                print('No passed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+
+                                logging.info('No resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                print('No resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+
         except:
+
             logging.info('No resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
             print('No resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
 
@@ -309,7 +318,6 @@ def comp_report(compliance,accountGroup,ambiente,cloud,turbo=False):
 
     #[{"id":"String","name":"Storgae","sectionSummaries":[{"failedResources":int,"passedResources":int,"totalResources":int,"id":"String":"name":"2.2.1"}]},...]
     compliancePosture=compliance_porture(compliance_id,accountGroup)
-    print(compliancePosture)
 
     for requirement in allRequirements:
 
@@ -541,4 +549,4 @@ def general_debugging():
 
 # print(all_compliance_requirements('c9efa28a-56b3-4166-bf95-8adfb4fb2306'))
 # print(compliance_porture('c9efa28a-56b3-4166-bf95-8adfb4fb2306'))
-# general_debugging()
+general_debugging()

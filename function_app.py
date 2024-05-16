@@ -79,6 +79,20 @@ def all_sections_of_a_compliance_requirement(requirement_id):
     #[{"description":"","id":"","sectionId":""},...]
     return response
 
+def compliance_porture(compliance_id,account_group):
+
+    url="https://{}.prismacloud.io/v2/compliance/posture/{}".format(region,compliance_id)
+
+    payload={"timeType":"to_now","timeUnit":"epoch",'account.group':account_group}
+    headers={
+        "Accept": "application/json; charset=UTF-8",
+        "x-redlock-auth": token()
+    }
+
+    response=requests.request("GET",url,headers=headers,params=payload)                                                                                  
+    response=json.loads(response.content)
+    return response['requirementSummaries']
+
 def assets_explorer(account_group,compliance_name,requirement_name,section_id):
 
     url = "https://{}.prismacloud.io/v2/resource/scan_info".format(region)
@@ -146,6 +160,8 @@ def send_dicts_to_blob_storage(data, blob_service_client, container_name, blob_n
         print(f"Error uploading data: {e}")
         logging.info(f"Error uploading data: {e}")
 
+# def row_creation():
+
 def row_maker(main_data,asset,compliance_name,cloud,ambiente,section,requirement_name):
 
     # severity_guide=['','informational','low','medium','high','critical']
@@ -171,23 +187,6 @@ def row_maker(main_data,asset,compliance_name,cloud,ambiente,section,requirement
     else:
         severity=asset['scannedPolicies'][0]['severity']
         passed=asset['scannedPolicies'][0]['passed']
-    
-    # print(severity)
-    # if len(severities) > 1:
-        
-    #     index=0
-
-    #     for x in severities:
-    #         for y in severity_guide:
-    #             if x['severity']==y:
-    #                 if severity_guide.index(y) > index:
-    #                     severity=x['severity']
-    #                     index=severity_guide.index(y)
-
-    #     for x in severities:
-    #         if x['passed']==False:
-    #             passed=False
-    #             break
 
     row={}
     row={
@@ -210,10 +209,33 @@ def row_maker(main_data,asset,compliance_name,cloud,ambiente,section,requirement
 
     gc.collect()
 
-def data_maker(main_data,account_group,compliance_name,requirement_name,section,cloud,ambiente):
+def row_creation(main_data,cloud,compliance_name,section,requirement_name,ambiente,passed):
+
+    if section['associatedPolicyIds']!=[]:
+        severity=policy_severity(section['associatedPolicyIds'][0])
+    else:
+        severity='No policies associated to this control'
+    row={
+        'Cloud':cloud,
+        'Compliance Standard': compliance_name,
+        'Section ID': section['sectionId'],
+        'Section Description': section['description'],
+        'Requirement': requirement_name,
+        'Resource': "Please visit https://app4.prismacloud.io for more information about the name of this resource",
+        'Account ID': "Please visit https://app4.prismacloud.io for more information about the name of this resource",
+        'Account Name': "Please visit https://app4.prismacloud.io for more information about the name of this resource",
+        'Enviroment': ambiente,
+        'Severity': severity,
+        'Passed': passed
+    }
+    main_data.append(row.copy())
+
+    del row
+
+def data_maker(main_data,account_group,compliance_name,requirement_name,section,cloud,ambiente,compliancePosture):
 
     allAssests=assets_explorer(account_group,compliance_name,requirement_name,section['sectionId'])
-    if allAssests != []:
+    if allAssests != [] and allAssests != {}:
         for asset in allAssests:
             
             # row_maker(main_data,asset,compliance_name,cloud,ambiente,section,requirement_name)
@@ -229,10 +251,37 @@ def data_maker(main_data,account_group,compliance_name,requirement_name,section,
             logging.info('Error adding {} of {}'.format(section['sectionId'],compliance_name))
             print('Error adding {} of {}'.format(section['sectionId'],compliance_name))
     else:
-        #row_maker(main_data,{},compliance_name,cloud,ambiente,section,requirement_name)
+        try:
+            for req in compliancePosture:
+                if req['name']==requirement_name:
+                    for x in req['sectionSummaries']:
+                        if x['id']==section['id']:
+                            try:
+                                for _ in range(int(x['failedResources'])):
+                                    # row_creation(main_data,cloud,compliance_name,section,requirement_name,ambiente,"FALSE")
+                                    t2=threading.Thread(target=row_creation, args=[main_data,cloud,compliance_name,section,requirement_name,ambiente,"FALSE"])
+                                    t2.start()
+                                t2.join()
+                                logging.info('Failed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                print('Failed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                            except:
+                                logging.info('No failed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                print('No failed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
 
-        logging.info('No resources found for {} {}'.format(section['sectionId'],compliance_name))
-        print('No resources found for {} {}'.format(section['sectionId'],compliance_name))
+                            try:
+                                for _ in range(int(x['passedResources'])):
+                                    # row_creation(main_data,cloud,compliance_name,section,requirement_name,ambiente,"TRUE")
+                                    t=threading.Thread(target=row_creation, args=[main_data,cloud,compliance_name,section,requirement_name,ambiente,"TRUE"])
+                                    t.start()
+                                t.join()
+                                logging.info('Passed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                print('Passed data created for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                            except:
+                                logging.info('No passed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+                                print('No passed resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+        except:
+            logging.info('No resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
+            print('No resources found for {} {} {}'.format(section['sectionId'],section['description'],compliance_name))
 
 # region Handlers
 def comp_report(compliance,accountGroup,ambiente,cloud,turbo=False):
@@ -258,18 +307,21 @@ def comp_report(compliance,accountGroup,ambiente,cloud,turbo=False):
     #[{"description":"Ensure that...","id":"","name":"iam","requirementId":"1",...},...]
     allRequirements=all_compliance_requirements(compliance_id)
 
+    #[{"id":"String","name":"Storgae","sectionSummaries":[{"failedResources":int,"passedResources":int,"totalResources":int,"id":"String":"name":"2.2.1"}]},...]
+    compliancePosture=compliance_porture(compliance_id,accountGroup)
+    print(compliancePosture)
+
     for requirement in allRequirements:
 
         requirement_id=requirement['id']
         requirement_name=requirement['name']
-
         allSections=all_sections_of_a_compliance_requirement(requirement_id)
 
         for section in allSections:
             if turbo == False:
-                data_maker(dataMain,accountGroup,compliance,requirement_name,section,cloud,ambiente)
+                data_maker(dataMain,accountGroup,compliance,requirement_name,section,cloud,ambiente,compliancePosture)
             elif turbo == True:  
-                t=threading.Thread(target=data_maker, args=[dataMain,accountGroup,compliance,requirement_name,section,cloud,ambiente])  
+                t=threading.Thread(target=data_maker, args=[dataMain,accountGroup,compliance,requirement_name,section,cloud,ambiente,compliancePosture])  
                 t.start()
         
         if turbo == True:
@@ -486,3 +538,7 @@ def general_debugging():
     clouds=['aws','oci','azure']
     for cloud in clouds:
         merge_csv_from_blob(cloud,ambientes)
+
+# print(all_compliance_requirements('c9efa28a-56b3-4166-bf95-8adfb4fb2306'))
+# print(compliance_porture('c9efa28a-56b3-4166-bf95-8adfb4fb2306'))
+# general_debugging()
